@@ -7,7 +7,8 @@ BASE_NAME=debian-live-13.7.0-amd64-xfce.iso
 BASE_URL=https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid
 BASE_ISO=/root/debian-live-base.iso
 OUTPUT_DIR=/mnt/c/Users/ETHAN/Documents/Citron-OS
-OUTPUT_ISO=$OUTPUT_DIR/Citron-OS-1.0-amd64.iso
+VERSION=1.1
+OUTPUT_ISO=$OUTPUT_DIR/Citron-OS-${VERSION}-amd64.iso
 
 if [[ ! -f "$SOURCE_DIR/citron-shell.c" ]]; then
   echo "Citron native shell source not found at $SOURCE_DIR" >&2
@@ -72,10 +73,10 @@ Theme=citron
 ShowDelay=0
 PLYMOUTH
 
-cat > "$WORK_DIR/overlay/etc/os-release" <<'OSRELEASE'
-PRETTY_NAME="Citron OS 1.0 (Debian GNU/Linux 13.7)"
+cat > "$WORK_DIR/overlay/etc/os-release" <<OSRELEASE
+PRETTY_NAME="Citron OS ${VERSION} (Debian GNU/Linux 13.7)"
 NAME="Citron OS"
-VERSION_ID="1.0"
+VERSION_ID="${VERSION}"
 ID=citron
 ID_LIKE=debian
 OSRELEASE
@@ -85,6 +86,13 @@ cat > "$WORK_DIR/overlay/usr/local/bin/start-citron-os" <<'START'
 xfce4-panel --quit >/dev/null 2>&1 || true
 xset s off >/dev/null 2>&1 || true
 xset -dpms >/dev/null 2>&1 || true
+PROFILE="$HOME/.config/citron-os/profile.ini"
+if [ -r "$PROFILE" ]; then
+  LANGUAGE_CHOICE=$(sed -n 's/^language=//p' "$PROFILE" | head -n 1)
+  KEYBOARD_CHOICE=$(sed -n 's/^keyboard=//p' "$PROFILE" | head -n 1)
+  case "$LANGUAGE_CHOICE" in en) export LANG=en_US.UTF-8 LANGUAGE=en ;; fr) export LANG=fr_FR.UTF-8 LANGUAGE=fr ;; esac
+  case "$KEYBOARD_CHOICE" in us|fr) setxkbmap "$KEYBOARD_CHOICE" >/dev/null 2>&1 || true ;; esac
+fi
 sleep 2
 while true; do
   /usr/local/bin/citron-shell
@@ -102,21 +110,42 @@ Exec=/usr/local/bin/start-citron-os
 X-GNOME-Autostart-enabled=true
 DESKTOP
 
+# Fetch GNOME applications and their dependency closure against the exact
+# package database shipped in the live root filesystem, then layer the .debs.
+mkdir -p "$WORK_DIR/package-cache/archives/partial" "$WORK_DIR/overlay"
+unsquashfs -cat "$WORK_DIR/tree/live/filesystem.squashfs" var/lib/dpkg/status > "$WORK_DIR/live-dpkg-status"
+apt-get -o Dir::State::status="$WORK_DIR/live-dpkg-status" \
+  -o Dir::Cache::archives="$WORK_DIR/package-cache/archives" \
+  --download-only --no-install-recommends -y install \
+  gnome-control-center gnome-terminal gnome-calendar gnome-clocks gnome-firmware
+shopt -s nullglob
+for deb in "$WORK_DIR/package-cache/archives"/*.deb; do
+  dpkg-deb -x "$deb" "$WORK_DIR/overlay"
+done
+unsquashfs -f -d "$WORK_DIR/overlay" "$WORK_DIR/tree/live/filesystem.squashfs" usr/share/glib-2.0/schemas >/dev/null
+if command -v glib-compile-schemas >/dev/null 2>&1; then
+  find "$WORK_DIR/overlay/usr/share/glib-2.0/schemas" -type f -name '*.xml' -print0 2>/dev/null \
+    | xargs -0 -r -I{} dirname '{}' | sort -u \
+    | while IFS= read -r schema_dir; do glib-compile-schemas "$schema_dir"; done
+fi
+
 mksquashfs "$WORK_DIR/overlay" "$WORK_DIR/citron.squashfs" -noappend -comp xz -b 1M
 cp "$WORK_DIR/citron.squashfs" "$WORK_DIR/tree/live/citron.squashfs"
 printf 'filesystem.squashfs\ncitron.squashfs\n' > "$WORK_DIR/tree/live/filesystem.module"
 for cfg in "$WORK_DIR/tree"/boot/grub/*.cfg "$WORK_DIR/tree"/isolinux/*.cfg; do
   [[ -f "$cfg" ]] || continue
-  sed -i 's/Debian GNU\/Linux Live/Citron OS 1.0/g; s/Debian GNU\/Linux live/Citron OS 1.0/g' "$cfg"
+  sed -i "s/Debian GNU\\/Linux Live/Citron OS ${VERSION}/g; s/Debian GNU\\/Linux live/Citron OS ${VERSION}/g" "$cfg"
+  # Ask live-boot to mount a USB partition labelled "persistence" when one exists.
+  sed -i 's/boot=live/boot=live persistence/g' "$cfg"
 done
-sed -i 's/Live Boot Menu with GRUB/Citron OS 1.0/g' "$WORK_DIR/tree/boot/grub/theme.cfg"
-sed -i 's/menu title Boot menu/menu title Citron OS 1.0/g' "$WORK_DIR/tree/isolinux/stdmenu.cfg"
+sed -i "s/Live Boot Menu with GRUB/Citron OS ${VERSION}/g" "$WORK_DIR/tree/boot/grub/theme.cfg"
+sed -i "s/menu title Boot menu/menu title Citron OS ${VERSION}/g" "$WORK_DIR/tree/isolinux/stdmenu.cfg"
 
 rm -f "$OUTPUT_ISO"
 xorriso -indev "$BASE_ISO" -outdev "$OUTPUT_ISO" \
   -update_r "$WORK_DIR/tree" / \
   -boot_image any replay \
-  -volid CITRON_OS_1_0 \
+  -volid CITRON_OS_1_1 \
   -commit
 
 sha256sum "$OUTPUT_ISO" > "$OUTPUT_ISO.sha256"
