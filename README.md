@@ -14,7 +14,7 @@ wsl -d Debian -u root -- apt-get install -y xorriso squashfs-tools gcc pkg-confi
 Puis lancez depuis PowerShell :
 
 ```powershell
-wsl -d Debian -u root -- bash /mnt/c/Users/ETHAN/Documents/Citron-OS/build-iso.sh
+wsl -d Debian -u root -- bash /mnt/c/Users/citron/Documents/Citron-OS/build-iso.sh
 ```
 
 Le script vérifie la somme de contrôle de l’image Debian Live officielle, compile `citron-shell.c`, ajoute le bureau natif, les applications GNOME et le splash Plymouth animé, puis génère `Citron-OS-1.1-amd64.iso` et sa somme SHA-256. L’ISO démarre en BIOS et UEFI.
