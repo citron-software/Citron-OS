@@ -1,6 +1,7 @@
 # Citron OS
 
 Citron OS est une distribution Linux live amorçable x86_64, basée sur Debian 13. Elle démarre sur un bureau GTK natif compilé pour Linux ; l’ISO ne lance pas `index.html`. Le citron apparaît dans les menus de démarrage et dans un splash Plymouth animé avec des points pulsants et une barre de progression.
+Regardez la vidéo de démonstration sur une VM ici : https://jumpshare.com/share/UxNt9YTJRIqleiFyYj9X
 
 ## Créer l’ISO
 
